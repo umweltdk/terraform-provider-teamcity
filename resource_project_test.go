@@ -12,7 +12,6 @@ import (
   //"time"
 
   //"github.com/hashicorp/terraform/helper/acctest"
-  "github.com/hashicorp/terraform/helper/hashcode"
   "github.com/hashicorp/terraform/helper/resource"
   "github.com/hashicorp/terraform/terraform"
 
@@ -24,19 +23,17 @@ var testAccProject = `
 resource "teamcity_project" "bar" {
   parent = "Single"
   name = "bar"
-  parameters = [
-    {
-      name = "env.MUH"
-      type = "password"
-    },
-    {
-      name = "env.TEST"
-      type = "text"
-      validation_mode = "not_empty"
-      label = "Test framework"
-      description = "Name of the test framework to use"
-    }
-  ]
+  parameter {
+    name = "env.MUH"
+    type = "password"
+  }
+  parameter {
+    name = "env.TEST"
+    type = "text"
+    validation_mode = "not_empty"
+    label = "Test framework"
+    description = "Name of the test framework to use"
+  }
   parameter_values {
     "env.MUH" = "Hush Hush"
     "env.TEST" = "Hello"
@@ -79,20 +76,16 @@ func TestAccProject_basic(t *testing.T) {
             "teamcity_project.bar", "description", ""),
           resource.TestCheckResourceAttr(
             "teamcity_project.bar", "parameter_values.env.TEST", "Hello"),
+          testAccCheckParameter("teamcity_project.bar", "env.MUH", types.ParameterSpec{
+              Type: types.PasswordType{},
+            }),
+          testAccCheckParameter("teamcity_project.bar", "env.TEST", types.ParameterSpec{
+              Label: "Test framework",
+              Description: "Name of the test framework to use",
+              Type: types.TextType{"not_empty"},
+            }),
           resource.TestCheckResourceAttr(
-            "teamcity_project.bar", param("env.MUH", "name"), "env.MUH"),
-          resource.TestCheckResourceAttr(
-            "teamcity_project.bar", param("env.MUH", "type"), "password"),
-          resource.TestCheckResourceAttr(
-            "teamcity_project.bar", param("env.TEST", "name"), "env.TEST"),
-          resource.TestCheckResourceAttr(
-            "teamcity_project.bar", param("env.TEST", "type"), "text"),
-          resource.TestCheckResourceAttr(
-            "teamcity_project.bar", param("env.TEST", "validation_mode"), "not_empty"),
-          resource.TestCheckResourceAttr(
-            "teamcity_project.bar", param("env.TEST", "label"), "Test framework"),
-          resource.TestCheckResourceAttr(
-            "teamcity_project.bar", param("env.TEST", "description"), "Name of the test framework to use"),
+            "teamcity_project.bar", "parameter.#", "2"),
         ),
       },
     },
@@ -102,18 +95,16 @@ func TestAccProject_basic(t *testing.T) {
 var testAccProjectParentParameter = `
 resource "teamcity_project" "parent" {
   name = "Parent"
-  parameters = [
-    {
-      name = "env.CLOVER"
-      type = "text"
-      validation_mode = "any"
-    },
-    {
-      name = "env.GROVER"
-      type = "text"
-      validation_mode = "any"
-    }
-  ]
+  parameter {
+    name = "env.CLOVER"
+    type = "text"
+    validation_mode = "any"
+  }
+  parameter {
+    name = "env.GROVER"
+    type = "text"
+    validation_mode = "any"
+  }
   parameter_values = {
     "env.OVER" = "Parent"
   }
@@ -121,18 +112,16 @@ resource "teamcity_project" "parent" {
 resource "teamcity_project" "bar" {
   parent = "${teamcity_project.parent.id}"
   name = "Bar"
-  parameters = [
-    {
-      name = "env.OVER"
-      type = "checkbox"
-      checked_value = "Hello"
-    },
-    {
-      name = "env.PLOVER"
-      type = "checkbox"
-      checked_value = "Hello"
-    }
-  ]
+  parameter {
+    name = "env.OVER"
+    type = "checkbox"
+    checked_value = "Hello"
+  }
+  parameter {
+    name = "env.PLOVER"
+    type = "checkbox"
+    checked_value = "Hello"
+  }
   parameter_values {
     "env.OVER" = "Owner"
   }
@@ -141,18 +130,16 @@ resource "teamcity_project" "bar" {
 var testAccProjectParentParameterUpdate = `
 resource "teamcity_project" "parent" {
   name = "Parent"
-  parameters = [
-    {
-      name = "env.CLOVER"
-      type = "text"
-      validation_mode = "any"
-    },
-    {
-      name = "env.PLOVER"
-      type = "text"
-      validation_mode = "any"
-    }
-  ]
+  parameter {
+    name = "env.CLOVER"
+    type = "text"
+    validation_mode = "any"
+  }
+  parameter {
+    name = "env.PLOVER"
+    type = "text"
+    validation_mode = "any"
+  }
   parameter_values = {
     "env.OVER" = "Parent"
     "env.PLOVER" = "Parent"
@@ -161,18 +148,16 @@ resource "teamcity_project" "parent" {
 resource "teamcity_project" "bar" {
   parent = "${teamcity_project.parent.id}"
   name = "Bar"
-  parameters = [
-    {
-      name = "env.OVER"
-      type = "checkbox"
-      checked_value = "Hello"
-    },
-    {
-      name = "env.MOVER"
-      type = "checkbox"
-      unchecked_value = "Hello"
-    }
-  ]
+  parameter {
+    name = "env.OVER"
+    type = "checkbox"
+    checked_value = "Hello"
+  }
+  parameter {
+    name = "env.MOVER"
+    type = "checkbox"
+    unchecked_value = "Hello"
+  }
   parameter_values {
     "env.OVER" = "Owner"
     "env.PLOVER" = "Owner"
@@ -226,22 +211,14 @@ func TestAccProject_parentParameters(t *testing.T) {
             "teamcity_project.bar", "description", ""),
           resource.TestCheckResourceAttr(
             "teamcity_project.bar", "parameter_values.env.OVER", "Owner"),
+          testAccCheckParameter("teamcity_project.bar", "env.OVER", types.ParameterSpec{
+              Type: types.CheckboxType{Checked: "Hello",},
+            }),
+          testAccCheckParameter("teamcity_project.bar", "env.PLOVER", types.ParameterSpec{
+              Type: types.CheckboxType{Checked: "Hello",},
+            }),
           resource.TestCheckResourceAttr(
-            "teamcity_project.bar", param("env.OVER", "name"), "env.OVER"),
-          resource.TestCheckResourceAttr(
-            "teamcity_project.bar", param("env.OVER", "type"), "checkbox"),
-          resource.TestCheckResourceAttr(
-            "teamcity_project.bar", param("env.OVER", "checked_value"), "Hello"),
-          resource.TestCheckResourceAttr(
-            "teamcity_project.bar", param("env.OVER", "unchecked_value"), ""),
-          resource.TestCheckResourceAttr(
-            "teamcity_project.bar", param("env.PLOVER", "name"), "env.PLOVER"),
-          resource.TestCheckResourceAttr(
-            "teamcity_project.bar", param("env.PLOVER", "type"), "checkbox"),
-          resource.TestCheckResourceAttr(
-            "teamcity_project.bar", param("env.PLOVER", "checked_value"), "Hello"),
-          resource.TestCheckResourceAttr(
-            "teamcity_project.bar", param("env.PLOVER", "unchecked_value"), ""),
+            "teamcity_project.bar", "parameter.#", "2"),
         ),
       },
       resource.TestStep{
@@ -285,22 +262,16 @@ func TestAccProject_parentParameters(t *testing.T) {
             "teamcity_project.bar", "parameter_values.env.OVER", "Owner"),
           resource.TestCheckResourceAttr(
             "teamcity_project.bar", "parameter_values.env.PLOVER", "Owner"),
+          //resource.TestCheckResourceAttr(
+          //  "teamcity_project.bar", "parameter_values.#", "2"),
+          testAccCheckParameter("teamcity_project.bar", "env.OVER", types.ParameterSpec{
+              Type: types.CheckboxType{Checked: "Hello",},
+            }),
+          testAccCheckParameter("teamcity_project.bar", "env.MOVER", types.ParameterSpec{
+              Type: types.CheckboxType{Unchecked: "Hello",},
+            }),
           resource.TestCheckResourceAttr(
-            "teamcity_project.bar", param("env.OVER", "name"), "env.OVER"),
-          resource.TestCheckResourceAttr(
-            "teamcity_project.bar", param("env.OVER", "type"), "checkbox"),
-          resource.TestCheckResourceAttr(
-            "teamcity_project.bar", param("env.OVER", "checked_value"), "Hello"),
-          resource.TestCheckResourceAttr(
-            "teamcity_project.bar", param("env.OVER", "unchecked_value"), ""),
-          resource.TestCheckResourceAttr(
-            "teamcity_project.bar", param("env.MOVER", "name"), "env.MOVER"),
-          resource.TestCheckResourceAttr(
-            "teamcity_project.bar", param("env.MOVER", "type"), "checkbox"),
-          resource.TestCheckResourceAttr(
-            "teamcity_project.bar", param("env.MOVER", "checked_value"), ""),
-          resource.TestCheckResourceAttr(
-            "teamcity_project.bar", param("env.MOVER", "unchecked_value"), "Hello"),
+            "teamcity_project.bar", "parameter.#", "2"),
         ),
       },
     },
@@ -391,8 +362,4 @@ func testAccCheckProjectExists(n string, v *types.Project) resource.TestCheckFun
 
     return nil
   }
-}
-
-func param(name string, parameter string) string {
-  return fmt.Sprintf("parameters.%d.%s", hashcode.String(name), parameter)
 }

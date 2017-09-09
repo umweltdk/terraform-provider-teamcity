@@ -35,10 +35,10 @@ func resourceProject() *schema.Resource {
                 Type:     schema.TypeString,
                 Optional: true,
             },
-            "parameters": &schema.Schema{
+            "parameter": &schema.Schema{
                 Type:     schema.TypeSet,
                 Elem:     resourceParameter(),
-                Set:      parameterHash,
+                Set:      parameterValueHash,
                 Optional: true,
             },
             "parameter_values": &schema.Schema{
@@ -65,7 +65,6 @@ func resourceProjectCreate(d *schema.ResourceData, meta interface{}) error {
     project := types.Project{
         ParentProjectID: types.ProjectId(parent),
         Name: name,
-        Description: d.Get("description").(string),
     }
     err := client.CreateProject(&project)
     if err != nil {
@@ -75,6 +74,13 @@ func resourceProjectCreate(d *schema.ResourceData, meta interface{}) error {
     d.SetId(id)
     d.SetPartial("parent")
     d.SetPartial("name")
+
+    description := d.Get("description").(string)
+    if description != "" {
+        if err = client.SetProjectDescription(id, description); err != nil {
+            return err
+        }
+    }
     d.SetPartial("description")
 
     if parent == "" {
@@ -87,7 +93,7 @@ func resourceProjectCreate(d *schema.ResourceData, meta interface{}) error {
         parent_parameters = parent_project.Parameters
     }
 
-    parameters := definitionToParameters(*d.Get("parameters").(*schema.Set))
+    parameters := definitionToParameters(*d.Get("parameter").(*schema.Set))
     for name, _ := range parameters {
         if parent_parameter, ok := parent_parameters[name]; ok && parent_parameter.Spec != nil {
             return fmt.Errorf("Can't redefine parent parameter %s", name)
@@ -112,7 +118,7 @@ func resourceProjectCreate(d *schema.ResourceData, meta interface{}) error {
         return err
     }
     d.SetPartial("parameter_values")
-    d.SetPartial("parameters")
+    d.SetPartial("parameter")
 
     d.Partial(false)
     return nil
@@ -169,7 +175,7 @@ func resourceProjectRead(d *schema.ResourceData, meta interface{}) error {
             }
         }
     }
-    d.Set("parameters", parametersToDefinition(parameters))
+    d.Set("parameter", parametersToDefinition(parameters))
     d.Set("parameter_values", values)
 
     return nil
@@ -180,7 +186,15 @@ func resourceProjectUpdate(d *schema.ResourceData, meta interface{}) error {
 
     id := d.Id()
     d.Partial(true)
-    if d.HasChange("parameters") || d.HasChange("parameter_values") {
+
+    if d.HasChange("description") {
+        if err := client.SetProjectDescription(d.Id(), d.Get("description").(string)); err != nil {
+            return err
+        }
+        d.SetPartial("description")
+    }
+
+    if d.HasChange("parameter") || d.HasChange("parameter_values") {
         parent := d.Get("parent").(string)
         if parent == "" {
             parent = "_Root"
@@ -192,7 +206,7 @@ func resourceProjectUpdate(d *schema.ResourceData, meta interface{}) error {
             parent_parameters = parent_project.Parameters
         }
 
-        o, n := d.GetChange("parameters")
+        o, n := d.GetChange("parameter")
         parameters := definitionToParameters(*n.(*schema.Set))
         old := definitionToParameters(*o.(*schema.Set))
         replace_parameters := make(types.Parameters)
@@ -230,7 +244,7 @@ func resourceProjectUpdate(d *schema.ResourceData, meta interface{}) error {
             }
         }
         d.SetPartial("parameter_values")
-        d.SetPartial("parameters")
+        d.SetPartial("parameter")
     }
 
     return nil

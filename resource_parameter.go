@@ -1,6 +1,7 @@
 package main
 
 import (
+  "fmt"
   "github.com/hashicorp/terraform/helper/schema"
   "github.com/hashicorp/terraform/helper/hashcode"
 
@@ -31,7 +32,6 @@ func resourceParameter() *schema.Resource {
       // Text type options
       "validation_mode": &schema.Schema{
         Type:     schema.TypeString,
-        Default:  "any",
         Optional: true,
       },
       // Checkbox type options
@@ -61,13 +61,32 @@ func resourceParameter() *schema.Resource {
   }
 }
 
-func parameterHash(v interface{}) int {
+func parameterValueHash(v interface{}) int {
+    rd := v.(map[string]interface{})
+    name := rd["name"].(string)
+    spec := definitionToParameterSpec(rd)
+    /*
+    var rawType string
+    if spec != nil {
+      rawType = spec.String()
+    }
+    */
+    hk := fmt.Sprintf("%s=%s", name, spec)
+    //fmt.Printf("[DEBUG] TeamCity parameterValueHash(%#v): %s: hk=%s,hc=%d\n", v, name, hk, hashcode.String(hk))
+    log.Printf("[DEBUG] TeamCity parameterValueHash(%#v): %s: hk=%s,hc=%d\n", v, name, hk, hashcode.String(hk))
+    return hashcode.String(hk)
+}
+
+func parameterKeyHash(v interface{}) int {
   m := v.(map[string]interface{})
-  return hashcode.String(m["name"].(string))
+  hk := m["name"].(string)
+  //fmt.Printf("[DEBUG] TeamCity parameterKeyHash(%#v): %s: hk=%s,hc=%d\n", v, hk, hk, hashcode.String(hk))
+  log.Printf("[DEBUG] TeamCity parameterKeyHash(%#v): %s: hk=%s,hc=%d\n", v, hk, hk, hashcode.String(hk))
+  return hashcode.String(hk)
 }
 
 func parametersToDefinition(parameters types.Parameters) *schema.Set {
-  ret := schema.NewSet(parameterHash, []interface{}{})
+  ret := schema.NewSet(parameterValueHash, []interface{}{})
   for name, parameter := range parameters {
     param := make(map[string]interface{})
     if parameter.Spec != nil {
@@ -102,38 +121,46 @@ func parameterValues(parameters types.Parameters) map[string]interface{} {
   return ret
 }
 
+func definitionToParameterSpec(param map[string]interface{}) *types.ParameterSpec {
+  if param["type"].(string) != "" || param["label"].(string) != "" || param["description"].(string) != "" {
+    var tp types.ParameterType
+    if param["type"].(string) == "text" {
+      tp = &types.TextType{
+        ValidationMode: param["validation_mode"].(string),
+      }
+    } else if param["type"].(string) == "password" {
+      tp = &types.PasswordType{}
+    } else if param["type"].(string) == "checkbox" {
+      tp = &types.CheckboxType{
+        Checked:   param["checked_value"].(string),
+        Unchecked: param["unchecked_value"].(string),
+      }
+    } else if param["type"].(string) == "select" {
+      tp = &types.SelectType{
+        AllowMultiple: param["allow_multiple"].(bool),
+        ValueSeparator: param["value_separator"].(string),
+      }
+    } else {
+      tp = &types.TextType{"any"}
+    }
+    ret := &types.ParameterSpec{
+      Label:       param["label"].(string),
+      Description: param["description"].(string),
+      Type:        tp,
+    }
+    log.Printf("Parameter %s => %q", param["name"].(string), ret)
+    return ret
+  }
+  return nil
+}
+
 func definitionToParameters(parameters schema.Set) types.Parameters {
+  keySet := schema.NewSet(parameterKeyHash, parameters.List())
   ret := make(types.Parameters)
-  for _, v := range parameters.List() {
+  for _, v := range keySet.List() {
     param := v.(map[string]interface{})
-    parameter := types.Parameter{Spec: nil}
-    if param["type"].(string) != "" || param["label"].(string) != "" || param["description"].(string) != "" {
-      var tp types.ParameterType
-      if param["type"].(string) == "text" {
-        tp = &types.TextType{
-          ValidationMode: param["validation_mode"].(string),
-        }
-      } else if param["type"].(string) == "password" {
-        tp = &types.PasswordType{}
-      } else if param["type"].(string) == "checkbox" {
-        tp = &types.CheckboxType{
-          Checked:   param["checked_value"].(string),
-          Unchecked: param["unchecked_value"].(string),
-        }
-      } else if param["type"].(string) == "select" {
-        tp = &types.SelectType{
-          AllowMultiple: param["allow_multiple"].(bool),
-          ValueSeparator: param["value_separator"].(string),
-        }
-      } else {
-        tp = &types.TextType{"any"}
-      }
-      parameter.Spec = &types.ParameterSpec{
-        Label:       param["label"].(string),
-        Description: param["description"].(string),
-        Type:        tp,
-      }
-      log.Printf("Parameter %s => %q", param["name"].(string), parameter)
+    parameter := types.Parameter{
+      Spec: definitionToParameterSpec(param),
     }
     ret[param["name"].(string)] = parameter
   }
